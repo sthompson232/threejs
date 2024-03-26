@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js'
+import { GPUComputationRenderer } from 'three/addons/misc/GPUComputationRenderer.js'
 import GUI from 'lil-gui'
 import particlesVertexShader from './shaders/particles/vertex.glsl'
 import particlesFragmentShader from './shaders/particles/fragment.glsl'
@@ -80,12 +81,28 @@ debugObject.clearColor = '#29191f'
 renderer.setClearColor(debugObject.clearColor)
 
 /**
+ * Base geometry
+ */
+const baseGeometry = {}
+baseGeometry.instance = new THREE.SphereGeometry(3)
+baseGeometry.count = baseGeometry.instance.attributes.position.count
+
+/**
+ * GPU Compute
+ */
+// Setup
+const gpgpu = {}
+gpgpu.size = Math.ceil(Math.sqrt(baseGeometry.count))
+gpgpu.computation = new GPUComputationRenderer(gpgpu.size, gpgpu.size, renderer)
+
+// Base particles
+const baseParticlesTexture = gpgpu.computation.createTexture()
+console.log(baseParticlesTexture);
+
+/**
  * Particles
  */
 const particles = {}
-
-// Geometry
-particles.geometry = new THREE.SphereGeometry(3)
 
 // Material
 particles.material = new THREE.ShaderMaterial({
@@ -99,7 +116,7 @@ particles.material = new THREE.ShaderMaterial({
 })
 
 // Points
-particles.points = new THREE.Points(particles.geometry, particles.material)
+particles.points = new THREE.Points(baseGeometry.instance, particles.material)
 scene.add(particles.points)
 
 /**
