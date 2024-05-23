@@ -1,23 +1,22 @@
-import './style.css'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
-import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer'
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass'
-import { DotScreenPass } from 'three/examples/jsm/postprocessing/DotScreenPass'
-import { GlitchPass } from 'three/examples/jsm/postprocessing/GlitchPass'
-import { RGBShiftShader } from 'three/examples/jsm/shaders/RGBShiftShader'
-import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass'
-import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass'
+import GUI from 'lil-gui'
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
+import { DotScreenPass } from 'three/examples/jsm/postprocessing/DotScreenPass.js'
+import { GlitchPass } from 'three/examples/jsm/postprocessing/GlitchPass.js'
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
+import { RGBShiftShader } from 'three/examples/jsm/shaders/RGBShiftShader.js'
+import { GammaCorrectionShader } from 'three/examples/jsm/shaders/GammaCorrectionShader.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass'
-import * as dat from 'dat.gui'
-
+import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js'
 
 /**
  * Base
  */
 // Debug
-const gui = new dat.GUI()
+const gui = new GUI()
 
 // Canvas
 const canvas = document.querySelector('canvas.webgl')
@@ -41,7 +40,7 @@ const updateAllMaterials = () =>
     {
         if(child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial)
         {
-            child.material.envMapIntensity = 5
+            child.material.envMapIntensity = 2.5
             child.material.needsUpdate = true
             child.castShadow = true
             child.receiveShadow = true
@@ -60,7 +59,7 @@ const environmentMap = cubeTextureLoader.load([
     '/textures/environmentMaps/0/pz.jpg',
     '/textures/environmentMaps/0/nz.jpg'
 ])
-environmentMap.encoding = THREE.sRGBEncoding
+environmentMap.colorSpace = THREE.SRGBColorSpace
 
 scene.background = environmentMap
 scene.environment = environmentMap
@@ -113,10 +112,9 @@ window.addEventListener('resize', () =>
     renderer.setSize(sizes.width, sizes.height)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 
-    // UPDATE EFFECT COMPOSER
-    effectComposer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    // Update effect composer
     effectComposer.setSize(sizes.width, sizes.height)
-
+    effectComposer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 })
 
 /**
@@ -140,130 +138,121 @@ const renderer = new THREE.WebGLRenderer({
 })
 renderer.shadowMap.enabled = true
 renderer.shadowMap.type = THREE.PCFShadowMap
-renderer.physicallyCorrectLights = true
-renderer.outputEncoding = THREE.sRGBEncoding
 renderer.toneMapping = THREE.ReinhardToneMapping
 renderer.toneMappingExposure = 1.5
 renderer.setSize(sizes.width, sizes.height)
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 
+/**
+ * Post processing
+ */
+const renderTarget = new THREE.WebGLRenderTarget(
+    800,
+    600,
+    {
+        samples: 2
+    }
+)
 
-
-//////////////////////////////////////////////////////////////////////////////////////
-// POST PROCESSING
-
-
-
-// RENDER TARGET
-let RenderTargetClass = null 
-
-if (renderer.getPixelRatio() === 1 && renderer.capabilities.isWebGL2) {
-    RenderTargetClass = THREE.WebGLMultisampleRenderTarget
-} else {
-    RenderTargetClass = THREE.WebGLRenderTarget
-}
-
-
-
-// ENSURES YOU HAVE SRGB ENCODING
-const renderTarget = new RenderTargetClass(800, 600, {
-    minFilter: THREE.LinearFilter,
-    magFilter: THREE.LinearFilter,
-    format: THREE.RGBAFormat,
-    encoding: THREE.sRGBEncoding
-})
-
-
-
-// COMPOSER
+// Effect composer
 const effectComposer = new EffectComposer(renderer, renderTarget)
 effectComposer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 effectComposer.setSize(sizes.width, sizes.height)
 
-
-
-// RENDER PASS
+// Render pass
 const renderPass = new RenderPass(scene, camera)
 effectComposer.addPass(renderPass)
 
-
-
-// DOT SCREEN PASS
+// Dot screen pass
 const dotScreenPass = new DotScreenPass()
 dotScreenPass.enabled = false
 effectComposer.addPass(dotScreenPass)
 
-
-
-// GLITCH PASS
+// Glitch pass
 const glitchPass = new GlitchPass()
-glitchPass.goWild = false
+glitchPass.goWild = true
 glitchPass.enabled = false
 effectComposer.addPass(glitchPass)
 
-
-
-// RGB SHIFT PASS
+// RGB Shift pass
 const rgbShiftPass = new ShaderPass(RGBShiftShader)
 rgbShiftPass.enabled = false
 effectComposer.addPass(rgbShiftPass)
 
+// Gamma correction pass
+const gammaCorrectionPass = new ShaderPass(GammaCorrectionShader)
+effectComposer.addPass(gammaCorrectionPass)
 
+// Antialias pass
+if(renderer.getPixelRatio() === 1 && !renderer.capabilities.isWebGL2)
+{
+    const smaaPass = new SMAAPass()
+    effectComposer.addPass(smaaPass)
 
-// UNREAL BLOOM PASS
+    console.log('Using SMAA')
+}
+
+// Unreal Bloom pass
 const unrealBloomPass = new UnrealBloomPass()
-unrealBloomPass.enabled = true
+unrealBloomPass.enabled = false
+effectComposer.addPass(unrealBloomPass)
+
 unrealBloomPass.strength = 0.3
 unrealBloomPass.radius = 1
 unrealBloomPass.threshold = 0.6
-effectComposer.addPass(unrealBloomPass)
 
 gui.add(unrealBloomPass, 'enabled')
 gui.add(unrealBloomPass, 'strength').min(0).max(2).step(0.001)
 gui.add(unrealBloomPass, 'radius').min(0).max(2).step(0.001)
 gui.add(unrealBloomPass, 'threshold').min(0).max(1).step(0.001)
 
-
-
-// TINT SHADER PASS
-const tintShader = {
-    uniforms: {
+// Tin pass
+const TintShader = {
+    uniforms:
+    {
         tDiffuse: { value: null },
         uTint: { value: null }
     },
     vertexShader: `
-    varying vec2 vUv;
-        void main() {
+        varying vec2 vUv;
+
+        void main()
+        {
             gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+
             vUv = uv;
         }
     `,
     fragmentShader: `
         uniform sampler2D tDiffuse;
         uniform vec3 uTint;
+
         varying vec2 vUv;
-        void main() {
+
+        void main()
+        {
             vec4 color = texture2D(tDiffuse, vUv);
             color.rgb += uTint;
+
             gl_FragColor = color;
         }
     `
 }
-const tintPass = new ShaderPass(tintShader)
-tintPass.material.uniforms.uTint.value = new THREE.Vector3(0.6 , 0.4, 0.2)
-tintPass.enabled = false
+
+const tintPass = new ShaderPass(TintShader)
+tintPass.material.uniforms.uTint.value = new THREE.Vector3()
 effectComposer.addPass(tintPass)
 
-gui.add(tintPass.material.uniforms.uTint.value, 'x').min(-1).max(1).step(0.01).name('Red')
-gui.add(tintPass.material.uniforms.uTint.value, 'y').min(-1).max(1).step(0.01).name('Green')
-gui.add(tintPass.material.uniforms.uTint.value, 'z').min(-1).max(1).step(0.01).name('Blue')
+gui.add(tintPass.material.uniforms.uTint.value, 'x').min(- 1).max(1).step(0.001).name('red')
+gui.add(tintPass.material.uniforms.uTint.value, 'y').min(- 1).max(1).step(0.001).name('green')
+gui.add(tintPass.material.uniforms.uTint.value, 'z').min(- 1).max(1).step(0.001).name('blue')
 
-
-
-// DISPLACEMENT PASS
-const displacementShader = {
-    uniforms: {
+// Displacement pass
+const DisplacementShader = {
+    uniforms:
+    {
         tDiffuse: { value: null },
+        uTime: { value: null },
         uNormalMap: { value: null }
     },
     vertexShader: `
@@ -297,24 +286,11 @@ const displacementShader = {
         }
     `
 }
-const displacementPass = new ShaderPass(displacementShader)
+
+const displacementPass = new ShaderPass(DisplacementShader)
+displacementPass.material.uniforms.uTime.value = 0
 displacementPass.material.uniforms.uNormalMap.value = textureLoader.load('/textures/interfaceNormalMap.png')
-displacementPass.enabled = true
 effectComposer.addPass(displacementPass)
-
-
-
-// SMAA PASS AFTER EVERYTHING ELSE
-if (renderer.getPixelRatio() === 1 && !renderer.capabilities.isWebGL2) {
-    const smaaPass = new SMAAPass()
-    effectComposer.addPass(smaaPass)
-    // Safari will probably need to use this as it doesn't support WebGL2 for anti-aliasing
-    console.log("Using SMAA")
-}
-
-///////////////////////////////////////////////////////////////////////////////////////
-
-
 
 /**
  * Animate
@@ -324,6 +300,9 @@ const clock = new THREE.Clock()
 const tick = () =>
 {
     const elapsedTime = clock.getElapsedTime()
+
+    // Update passes
+    displacementPass.material.uniforms.uTime.value = elapsedTime
 
     // Update controls
     controls.update()
